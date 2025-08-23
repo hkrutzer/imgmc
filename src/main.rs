@@ -11,6 +11,7 @@ use figment::{
 };
 use serde::Deserialize;
 use slug::slugify;
+use ureq::unversioned::multipart::Form;
 
 mod spinner;
 
@@ -127,7 +128,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let deployment = azure_config.deployment;
 
     let gen_url = format!(
-        "{api_base}/openai/deployments/{deployment}/images/generations?api-version={api_version}"
+        "{}/openai/deployments/{}/images/generations?api-version={}",
+        api_base, deployment, api_version
+    );
+
+    let edits_url = format!(
+        "{}/openai/deployments/{}/images/edits?api-version={}",
+        api_base, deployment, api_version
     );
 
     let size = cli.resolution.to_string();
@@ -136,22 +143,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let sp = spinner::Spinner::start("Calling API...");
 
-    let body = serde_json::json!({
-        "prompt": cli.prompt,
-        "n": n,
-        "size": size,
-        "background": "transparent",
-        "quality": quality,
-        "output_format": "png"
-    });
+    let gen_resp: GenerationResponse = if let Some(ref_path) = cli.reference.as_ref() {
+        let n = n.to_string();
 
-    let gen_resp = ureq::post(&gen_url)
-        .header("Content-Type", "application/json")
-        .header("api-key", &api_key)
-        .send_json(body)?
-        .body_mut()
-        .read_json::<GenerationResponse>()
-        .unwrap();
+        // Use the edits endpoint with multipart/form-data
+        let form = Form::new()
+            .text("prompt", &cli.prompt)
+            .text("n", &n)
+            .text("size", &size)
+            .text("quality", &quality)
+            .text("output_format", "png")
+            .file("image", ref_path)?;
+
+        ureq::post(&edits_url)
+            .header("api-key", &api_key)
+            .send(form)?
+            .body_mut()
+            .read_json::<GenerationResponse>()?
+    } else {
+        // Use the generations endpoint with JSON
+        let body = serde_json::json!({
+            "prompt": cli.prompt,
+            "n": n,
+            "size": size,
+            "quality": quality,
+            "output_format": "png"
+        });
+
+        ureq::post(&gen_url)
+            .header("Content-Type", "application/json")
+            .header("api-key", &api_key)
+            .send_json(body)?
+            .body_mut()
+            .read_json::<GenerationResponse>()
+            .unwrap()
+    };
 
     drop(sp);
 
