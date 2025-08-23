@@ -51,6 +51,22 @@ impl std::fmt::Display for ImageQuality {
 }
 
 #[derive(ValueEnum, Clone)]
+enum Background {
+    #[value(name = "auto")]
+    Auto,
+    #[value(name = "transparent")]
+    Transparent,
+    #[value(name = "opaque")]
+    Opaque,
+}
+
+impl std::fmt::Display for Background {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.to_possible_value().unwrap().get_name())
+    }
+}
+
+#[derive(ValueEnum, Clone)]
 enum ImageResolution {
     #[value(name = "1024x1024")]
     R1024x1024,
@@ -79,6 +95,9 @@ struct Cli {
 
     #[arg(long, default_value_t = ImageResolution::R1024x1024)]
     resolution: ImageResolution,
+
+    #[arg(long, default_value_t = Background::Auto)]
+    background: Background,
 
     #[arg(long, short, default_value_t = 1)]
     count: u8,
@@ -139,6 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let size = cli.resolution.to_string();
     let quality = cli.quality.to_string();
+    let background = cli.background.to_string();
     let n = cli.count;
 
     let sp = spinner::Spinner::start("Calling API...");
@@ -152,6 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .text("n", &n)
             .text("size", &size)
             .text("quality", &quality)
+            .text("background", &background)
             .text("output_format", "png")
             .file("image", ref_path)?;
 
@@ -166,6 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "prompt": cli.prompt,
             "n": n,
             "size": size,
+            "background": background,
             "quality": quality,
             "output_format": "png"
         });
